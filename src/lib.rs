@@ -9,11 +9,11 @@ use tracing_subscriber::layer::Context;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::Layer;
 
-mod appender;
-mod config;
-mod fields;
-mod pattern;
-mod renderer;
+pub mod appender;
+pub mod config;
+pub mod fields;
+pub mod pattern;
+pub mod renderer;
 
 struct ConfigurableLayer {
     config: Box<dyn LayerConfig>,
