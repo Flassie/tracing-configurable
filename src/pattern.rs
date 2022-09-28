@@ -1,6 +1,5 @@
 use crate::fields::FieldsVisitor;
 use crate::renderer::EventRenderer;
-use argable_parser::item::{Arg, Item, Value};
 use chrono::Local;
 use once_cell::sync::Lazy;
 use std::borrow::Cow;
@@ -11,6 +10,9 @@ use tracing::{Event, Subscriber};
 use tracing_subscriber::layer::Context;
 use tracing_subscriber::registry::LookupSpan;
 
+#[cfg(feature = "parse")]
+use argable_parser::item::{Arg, Item, Value};
+
 pub struct Pattern {
     items: Vec<PatternItem>,
 }
@@ -20,6 +22,7 @@ impl Pattern {
         Self { items }
     }
 
+    #[cfg(feature = "parse")]
     pub fn try_parse<S: AsRef<str>>(str: S) -> Result<Self, anyhow::Error> {
         let items = argable_parser::parse(str.as_ref())?;
 
@@ -33,7 +36,7 @@ impl Pattern {
                         None
                     })?;
 
-                    let mut properties = HashMap::new();
+                    let mut properties: HashMap<String, PlaceholderValue> = HashMap::new();
                     let mut flags = Vec::new();
 
                     if let Some(args) = v.args {
@@ -43,7 +46,7 @@ impl Pattern {
                                     flags.push(v.to_string());
                                 }
                                 Arg::Value(name, value) => {
-                                    properties.insert(name.to_string(), value);
+                                    properties.insert(name.to_string(), value.into());
                                 }
                             }
                         }
@@ -214,21 +217,48 @@ where
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug)]
 pub enum PatternItem {
     Text(String),
     Placeholder(Placeholder),
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug)]
+pub enum PlaceholderValue {
+    String(String),
+    Boolean(bool),
+    Integer(i32),
+    Float(f32),
+}
+
+#[cfg(feature = "parse")]
+impl From<Value> for PlaceholderValue {
+    fn from(v: Value) -> Self {
+        match v {
+            Value::String(str) => PlaceholderValue::String(str),
+            Value::Integer(v) => PlaceholderValue::Integer(v),
+            Value::Float(v) => PlaceholderValue::Float(v),
+            Value::Boolean(v) => PlaceholderValue::Boolean(v),
+        }
+    }
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Placeholder {
     ty: PlaceholderType,
-    properties: HashMap<String, Value>,
+    properties: HashMap<String, PlaceholderValue>,
     flags: Vec<String>,
 }
 
 impl Placeholder {
-    pub fn new(ty: PlaceholderType, props: HashMap<String, Value>, flags: Vec<String>) -> Self {
+    pub fn new(
+        ty: PlaceholderType,
+        props: HashMap<String, PlaceholderValue>,
+        flags: Vec<String>,
+    ) -> Self {
         Self {
             ty,
             properties: props,
@@ -242,7 +272,7 @@ impl Placeholder {
 
     pub fn str<N: AsRef<str>>(&self, name: N) -> Option<&str> {
         self.property(name).and_then(|i| {
-            if let Value::String(str) = i {
+            if let PlaceholderValue::String(str) = i {
                 Some(str.as_str())
             } else {
                 None
@@ -252,7 +282,7 @@ impl Placeholder {
 
     pub fn bool<N: AsRef<str>>(&self, name: N) -> Option<bool> {
         self.property(name).and_then(|i| {
-            if let Value::Boolean(v) = i {
+            if let PlaceholderValue::Boolean(v) = i {
                 Some(*v)
             } else {
                 None
@@ -262,7 +292,7 @@ impl Placeholder {
 
     pub fn int<N: AsRef<str>>(&self, name: N) -> Option<i32> {
         self.property(name).and_then(|i| {
-            if let Value::Integer(v) = i {
+            if let PlaceholderValue::Integer(v) = i {
                 Some(*v)
             } else {
                 None
@@ -272,7 +302,7 @@ impl Placeholder {
 
     pub fn float<N: AsRef<str>>(&self, name: N) -> Option<f32> {
         self.property(name).and_then(|i| {
-            if let Value::Float(v) = i {
+            if let PlaceholderValue::Float(v) = i {
                 Some(*v)
             } else {
                 None
@@ -280,7 +310,7 @@ impl Placeholder {
         })
     }
 
-    pub fn property<N: AsRef<str>>(&self, name: N) -> Option<&Value> {
+    pub fn property<N: AsRef<str>>(&self, name: N) -> Option<&PlaceholderValue> {
         self.properties.get(name.as_ref())
     }
 
@@ -290,6 +320,7 @@ impl Placeholder {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u16)]
 pub enum PlaceholderType {
     Text = 1,

@@ -10,6 +10,9 @@ argable-parser = { git = "https://github.com/Flassie/argable-parser.git", option
 chrono = "0.4"
 anyhow = "1"
 once_cell = "1"
+serde = { version = "1", optional = true }
 
 [features]
-default = [ "argable-parser" ]
+default = [ "parse" ]
+serde = [ "dep:serde" ]
+parse = [ "dep:argable-parser" ]
